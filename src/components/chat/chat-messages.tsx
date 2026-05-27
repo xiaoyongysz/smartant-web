@@ -58,6 +58,7 @@ export function ChatMessages({ messages, user, isLoading }: ChatMessagesProps) {
           alt="智蚁"
           width={120}
           height={120}
+          style={{ width: '120px', height: 'auto' }}
           className="mb-6 rounded-2xl object-contain"
           priority
         />
