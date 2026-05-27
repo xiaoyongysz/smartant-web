@@ -152,7 +152,8 @@ src/
 │       └── scroll-area.tsx
 │
 ├── lib/
-│   ├── api.ts                    # 调用 /upload、/session
+│   ├── api-config.ts             # 下游地址与接口路径（改 8080 只改这里 + .env）
+│   ├── api.ts                    # 调用 upload、session
 │   ├── session-storage.ts        # localStorage 会话读写
 │   └── utils.ts                  # cn()、generateId() 等工具
 │
@@ -184,12 +185,32 @@ src/
 
 ---
 
-## 后端代理说明
+## 下游 API 配置（统一 8080）
 
-开发环境下，前端请求 `/api/documents/*` 会由 Next.js 转发到 `BACKEND_URL`，避免浏览器跨域问题。生产部署时请：
+所有接口在 **`src/lib/api-config.ts`** 集中定义，禁止在组件里写死 URL。
 
-- 同样配置 `BACKEND_URL` 做服务端代理，或
-- 设置 `NEXT_PUBLIC_API_BASE_URL` 为后端完整地址，并确保后端开启 CORS。
+| 配置项 | 说明 |
+|--------|------|
+| `BACKEND_URL` | 下游 Java 地址，默认 `http://localhost:8080`（`next.config` 代理用） |
+| `NEXT_PUBLIC_BACKEND_URL` | 浏览器直连下游，**应与 BACKEND_URL 一致** |
+
+`.env.local` 示例：
+
+```env
+BACKEND_URL=http://localhost:8080
+NEXT_PUBLIC_BACKEND_URL=http://localhost:8080
+```
+
+| 接口 | 完整地址（默认） |
+|------|------------------|
+| 上传 | `http://localhost:8080/api/documents/upload` |
+| 会话 | `http://localhost:8080/api/documents/session` |
+
+改端口或域名时，只改上述两个环境变量即可，上传与会话自动一致。
+
+**说明**：页面在 **7070** 打开；接口请求按配置打到 **8080**。若未设置 `NEXT_PUBLIC_BACKEND_URL`，会退化为相对路径 `/api/documents/*`，由 Next 根据 `BACKEND_URL` 代理到 8080（需后端对 7070 开启 CORS 时用直连方式更简单）。
+
+**不要**使用 `/smartant/ragApi/...` 等与 `api-config.ts` 不一致的路径。
 
 ## 使用说明
 

@@ -13,7 +13,15 @@ export function AssistantAvatar({ className, size = 32 }: AssistantAvatarProps) 
       alt="智蚁"
       width={size}
       height={size}
-      className={cn("shrink-0 rounded-full object-cover", className)}
+      className={cn("shrink-0 self-start rounded-full object-cover", className)}
+      style={{
+        width: size,
+        height: size,
+        minWidth: size,
+        minHeight: size,
+        maxWidth: size,
+        maxHeight: size,
+      }}
     />
   );
 }

@@ -52,7 +52,7 @@ export function ChatMessages({ messages, user, isLoading }: ChatMessagesProps) {
 
   if (messages.length === 0 && !isLoading) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center px-4">
+      <div className="flex flex-1 flex-col items-center justify-center px-6 lg:px-10">
         <Image
           src="/smartant-mascot.png"
           alt="智蚁"
@@ -61,10 +61,10 @@ export function ChatMessages({ messages, user, isLoading }: ChatMessagesProps) {
           className="mb-6 rounded-2xl object-contain"
           priority
         />
-        <h1 className="max-w-lg text-center text-2xl font-medium leading-relaxed tracking-tight text-foreground">
+        <h1 className="max-w-2xl text-center text-2xl font-medium leading-relaxed tracking-tight text-foreground">
           HI 我是智蚁，建筑知识百晓通，你有什么想说的么？
         </h1>
-        <p className="mt-4 max-w-md text-center text-sm text-muted-foreground">
+        <p className="mt-4 max-w-xl text-center text-sm text-muted-foreground">
           点击输入框左侧「+」上传 PDF、Word、Markdown 或 TXT，基于知识库向 smartant 提问。
         </p>
       </div>
@@ -73,19 +73,19 @@ export function ChatMessages({ messages, user, isLoading }: ChatMessagesProps) {
 
   return (
     <ScrollArea className="flex-1">
-      <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-8">
+      <div className="mx-auto w-full max-w-[888px] space-y-6 px-6 py-8 lg:px-10">
         {messages.map((message) => (
           <div
             key={message.id}
             className={cn(
-              "flex gap-4",
+              "flex items-start gap-4",
               message.role === "user" ? "justify-end" : "justify-start",
             )}
           >
             {message.role === "assistant" && <AssistantAvatar size={32} />}
             <div
               className={cn(
-                "max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed",
+                "max-w-[92%] rounded-2xl px-4 py-3 text-sm leading-relaxed",
                 message.role === "user"
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-foreground",
@@ -104,7 +104,7 @@ export function ChatMessages({ messages, user, isLoading }: ChatMessagesProps) {
         ))}
 
         {isLoading && (
-          <div className="flex gap-4">
+          <div className="flex items-start gap-4">
             <AssistantAvatar size={32} />
             <div className="rounded-2xl bg-muted px-4 py-3">
               <span className="inline-flex gap-1">
