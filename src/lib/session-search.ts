@@ -1,10 +1,13 @@
-import type { ChatSession } from "@/types/api";
+type SearchableSession = {
+  title: string;
+  messages: { content: string }[];
+};
 
 /** 按对话标题与消息正文搜索 */
-export function filterSessionsByQuery(
-  sessions: ChatSession[],
+export function filterSessionsByQuery<T extends SearchableSession>(
+  sessions: T[],
   query: string,
-): ChatSession[] {
+): T[] {
   const q = query.trim().toLowerCase();
   if (!q) return sessions;
 

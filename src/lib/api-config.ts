@@ -20,12 +20,14 @@ export const PUBLIC_BACKEND_URL =
 /** 与 Java DocumentApi @RequestMapping("/api/documents") 对齐 */
 export const DOCUMENTS_API_PREFIX = "/api/documents";
 export const RAGAPI_API_PREFIX = "/smartant/ragApi";
-
+/** 数据分析 Agent */
+export const ANALYTICS_API_PREFIX = "/api/analytics";
 
 /** 所有下游接口路径（禁止在业务代码里硬编码其它前缀） */
 export const API_ENDPOINTS = {
   upload: `${DOCUMENTS_API_PREFIX}/upload`,
   session: `${RAGAPI_API_PREFIX}/session`,
+  analyticsQuery: `${ANALYTICS_API_PREFIX}/query`,
 } as const;
 
 export type ApiEndpointKey = keyof typeof API_ENDPOINTS;

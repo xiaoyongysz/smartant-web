@@ -11,6 +11,14 @@ const nextConfig: NextConfig = {
         source: "/api/documents/:path*",
         destination: `${backendUrl}/api/documents/:path*`,
       },
+      {
+        source: "/api/analytics/:path*",
+        destination: `${backendUrl}/api/analytics/:path*`,
+      },
+      {
+        source: "/smartant/ragApi/:path*",
+        destination: `${backendUrl}/smartant/ragApi/:path*`,
+      },
     ];
   },
 };

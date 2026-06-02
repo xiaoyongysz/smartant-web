@@ -7,14 +7,20 @@ import { SidebarHeader } from "@/components/chat/sidebar-header";
 import { SidebarUser } from "@/components/chat/sidebar-user";
 import { cn } from "@/lib/utils";
 import type { AuthUser } from "@/lib/auth-storage";
-import type { ChatSession } from "@/types/api";
+export interface SidebarSessionItem {
+  id: string;
+  title: string;
+}
 
 interface ChatSidebarProps {
-  sessions: ChatSession[];
+  sessions: SidebarSessionItem[];
   currentSessionId: string | null;
   collapsed: boolean;
   searchOpen: boolean;
   searchQuery: string;
+  companyHref?: string;
+  companyTitle?: string;
+  footerTagline?: string;
   user: AuthUser | null;
   onSearchOpenChange: (open: boolean) => void;
   onSearchQueryChange: (query: string) => void;
@@ -41,6 +47,9 @@ export function ChatSidebar({
   onDeleteSession,
   onLoginClick,
   onLogout,
+  companyHref = "/analytics",
+  companyTitle = "数据分析",
+  footerTagline = "smartant · 建筑知识百晓通",
 }: ChatSidebarProps) {
   if (collapsed) {
     return (
@@ -74,6 +83,8 @@ export function ChatSidebar({
       <SidebarHeader
         searchOpen={searchOpen}
         searchQuery={searchQuery}
+        companyHref={companyHref}
+        companyTitle={companyTitle}
         onSearchOpenChange={onSearchOpenChange}
         onSearchQueryChange={onSearchQueryChange}
       />
@@ -142,7 +153,7 @@ export function ChatSidebar({
           onLogout={onLogout}
         />
         <p className="mt-2 text-center text-[10px] text-muted-foreground">
-          smartant · 建筑知识百晓通
+          {footerTagline}
         </p>
       </div>
     </aside>

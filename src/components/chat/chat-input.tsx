@@ -19,13 +19,19 @@ const ACCEPT =
 interface ChatInputProps {
   disabled?: boolean;
   uploading?: boolean;
+  showUpload?: boolean;
+  placeholder?: string;
+  footerHint?: string;
   onSend: (message: string) => void;
-  onUpload: (file: File) => Promise<void>;
+  onUpload?: (file: File) => Promise<void>;
 }
 
 export function ChatInput({
   disabled,
   uploading,
+  showUpload = true,
+  placeholder = "给 smartant 发送消息",
+  footerHint = "知识库问答基于已上传文档，回答可能引用原文片段。",
   onSend,
   onUpload,
 }: ChatInputProps) {
@@ -56,6 +62,7 @@ export function ChatInput({
       return;
     }
 
+    if (!onUpload) return;
     try {
       await onUpload(file);
     } catch {
@@ -80,38 +87,40 @@ export function ChatInput({
             onChange={handleFileChange}
           />
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="shrink-0 rounded-full"
-                disabled={disabled || uploading}
-              >
-                {uploading ? (
-                  <Loader2 className="size-5 animate-spin" />
-                ) : (
-                  <Plus className="size-5" />
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" side="top" className="w-56">
-              <DropdownMenuItem
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-              >
-                <Paperclip className="size-4" />
-                添加照片和文件
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {showUpload && onUpload && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="shrink-0 rounded-full"
+                  disabled={disabled || uploading}
+                >
+                  {uploading ? (
+                    <Loader2 className="size-5 animate-spin" />
+                  ) : (
+                    <Plus className="size-5" />
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" side="top" className="w-56">
+                <DropdownMenuItem
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                >
+                  <Paperclip className="size-4" />
+                  添加照片和文件
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
 
           <textarea
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="给 smartant 发送消息"
+            placeholder={placeholder}
             rows={1}
             disabled={disabled}
             className="max-h-40 min-h-[44px] flex-1 resize-none bg-transparent py-2.5 text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
@@ -128,7 +137,7 @@ export function ChatInput({
           </Button>
         </div>
         <p className="mt-2 text-center text-xs text-muted-foreground">
-          知识库问答基于已上传文档，回答可能引用原文片段。
+          {footerHint}
         </p>
       </div>
     </div>

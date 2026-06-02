@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Building2, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SmartantLogo } from "@/components/chat/smartant-logo";
@@ -8,6 +9,8 @@ import { cn } from "@/lib/utils";
 interface SidebarHeaderProps {
   searchOpen: boolean;
   searchQuery: string;
+  companyHref: string;
+  companyTitle: string;
   onSearchOpenChange: (open: boolean) => void;
   onSearchQueryChange: (query: string) => void;
 }
@@ -15,6 +18,8 @@ interface SidebarHeaderProps {
 export function SidebarHeader({
   searchOpen,
   searchQuery,
+  companyHref,
+  companyTitle,
   onSearchOpenChange,
   onSearchQueryChange,
 }: SidebarHeaderProps) {
@@ -26,17 +31,12 @@ export function SidebarHeader({
           variant="ghost"
           size="icon"
           className="ml-auto size-8 shrink-0"
-          title="公司主页"
+          title={companyTitle}
           asChild
         >
-          <a
-            href="https://smartant.ai"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="公司图标"
-          >
+          <Link href={companyHref} aria-label={companyTitle}>
             <Building2 className="size-4 text-emerald-600" />
-          </a>
+          </Link>
         </Button>
         <Button
           variant="ghost"
