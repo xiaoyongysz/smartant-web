@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { memo, type MutableRefObject } from "react";
 import Image from "next/image";
 import { AssistantAvatar } from "@/components/chat/assistant-avatar";
 import { AnalyticsMessageBody } from "@/components/analytics/analytics-message-body";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { StreamingMessageBody } from "@/components/analytics/streaming-message-body";
 import { cn } from "@/lib/utils";
+import { useChatScroll } from "@/hooks/use-chat-scroll";
+import type { StreamSink } from "@/components/analytics/streaming-message-body";
 import type { AuthUser } from "@/lib/auth-storage";
 import type { AnalyticsChatMessage } from "@/types/analytics";
 
@@ -13,6 +15,10 @@ interface AnalyticsChatMessagesProps {
   messages: AnalyticsChatMessage[];
   user: AuthUser | null;
   isLoading?: boolean;
+  isStreaming?: boolean;
+  streamingMessageId?: string | null;
+  streamSinkRef?: MutableRefObject<StreamSink | null>;
+  onStreamSinkReady?: () => void;
 }
 
 function UserMessageAvatar({ user }: { user: AuthUser | null }) {
@@ -43,16 +49,123 @@ function UserMessageAvatar({ user }: { user: AuthUser | null }) {
   );
 }
 
+const AssistantMessageBubble = memo(function AssistantMessageBubble({
+  message,
+  isLiveStream,
+  streamSinkRef,
+  onStreamSinkReady,
+  onContentGrow,
+}: {
+  message: AnalyticsChatMessage;
+  isLiveStream: boolean;
+  streamSinkRef?: MutableRefObject<StreamSink | null>;
+  onStreamSinkReady?: () => void;
+  onContentGrow?: () => void;
+}) {
+  if (message.analytics && !message.streaming) {
+    return <AnalyticsMessageBody analytics={message.analytics} />;
+  }
+
+  const hasPartialVisual =
+    message.analytics &&
+    (message.analytics.dashboard != null ||
+      Boolean(message.analytics.chart?.option));
+
+  if (message.streaming && isLiveStream && streamSinkRef) {
+    return (
+      <div className="space-y-4">
+        {hasPartialVisual && message.analytics && (
+          <AnalyticsMessageBody analytics={message.analytics} visualOnly />
+        )}
+        <StreamingMessageBody
+          sinkRef={streamSinkRef}
+          onReady={onStreamSinkReady}
+          onContentGrow={onContentGrow}
+        />
+      </div>
+    );
+  }
+
+  if (message.analytics) {
+    return <AnalyticsMessageBody analytics={message.analytics} />;
+  }
+
+  return (
+    <div className="min-w-0">
+      {message.progressHint ? (
+        <p className="mb-2 min-h-[1.125rem] truncate text-xs text-muted-foreground">
+          {message.progressHint}
+        </p>
+      ) : null}
+      <p className="whitespace-pre-wrap break-words text-sm leading-relaxed [overflow-wrap:anywhere]">
+        {message.content}
+      </p>
+    </div>
+  );
+});
+
+const AnalyticsMessageRow = memo(function AnalyticsMessageRow({
+  message,
+  user,
+  isLiveStream,
+  streamSinkRef,
+  onStreamSinkReady,
+  onContentGrow,
+}: {
+  message: AnalyticsChatMessage;
+  user: AuthUser | null;
+  isLiveStream: boolean;
+  streamSinkRef?: MutableRefObject<StreamSink | null>;
+  onStreamSinkReady?: () => void;
+  onContentGrow?: () => void;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-start gap-4",
+        message.role === "user" ? "justify-end" : "justify-start",
+      )}
+    >
+      {message.role === "assistant" && <AssistantAvatar size={32} />}
+      <div
+        className={cn(
+          "max-w-[92%] rounded-2xl px-4 py-3 text-sm leading-relaxed",
+          message.role === "user"
+            ? "bg-primary text-primary-foreground"
+            : "bg-muted text-foreground",
+        )}
+      >
+        {message.role === "user" ? (
+          <p className="whitespace-pre-wrap break-words">{message.content}</p>
+        ) : (
+          <AssistantMessageBubble
+            message={message}
+            isLiveStream={isLiveStream}
+            streamSinkRef={streamSinkRef}
+            onStreamSinkReady={onStreamSinkReady}
+            onContentGrow={onContentGrow}
+          />
+        )}
+      </div>
+      {message.role === "user" && <UserMessageAvatar user={user} />}
+    </div>
+  );
+});
+
 export function AnalyticsChatMessages({
   messages,
   user,
   isLoading,
+  isStreaming = false,
+  streamingMessageId = null,
+  streamSinkRef,
+  onStreamSinkReady,
 }: AnalyticsChatMessagesProps) {
-  const bottomRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isLoading]);
+  const { containerRef, stickToBottomInstant } = useChatScroll({
+    streaming: isStreaming,
+    messageCount: messages.length,
+    isLoading,
+  });
 
   if (messages.length === 0 && !isLoading) {
     return (
@@ -76,35 +189,21 @@ export function AnalyticsChatMessages({
   }
 
   return (
-    <ScrollArea className="flex-1">
+    <div
+      ref={containerRef}
+      className="flex-1 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]"
+    >
       <div className="mx-auto w-full max-w-[888px] space-y-6 px-6 py-8 lg:px-10">
         {messages.map((message) => (
-          <div
+          <AnalyticsMessageRow
             key={message.id}
-            className={cn(
-              "flex items-start gap-4",
-              message.role === "user" ? "justify-end" : "justify-start",
-            )}
-          >
-            {message.role === "assistant" && <AssistantAvatar size={32} />}
-            <div
-              className={cn(
-                "max-w-[92%] rounded-2xl px-4 py-3 text-sm leading-relaxed",
-                message.role === "user"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-foreground",
-              )}
-            >
-              {message.role === "user" ? (
-                <p className="whitespace-pre-wrap">{message.content}</p>
-              ) : message.analytics ? (
-                <AnalyticsMessageBody analytics={message.analytics} />
-              ) : (
-                <p className="whitespace-pre-wrap">{message.content}</p>
-              )}
-            </div>
-            {message.role === "user" && <UserMessageAvatar user={user} />}
-          </div>
+            message={message}
+            user={user}
+            isLiveStream={isStreaming && message.id === streamingMessageId}
+            streamSinkRef={streamSinkRef}
+            onStreamSinkReady={onStreamSinkReady}
+            onContentGrow={stickToBottomInstant}
+          />
         ))}
 
         {isLoading && (
@@ -119,8 +218,7 @@ export function AnalyticsChatMessages({
             </div>
           </div>
         )}
-        <div ref={bottomRef} />
       </div>
-    </ScrollArea>
+    </div>
   );
 }

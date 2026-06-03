@@ -22,6 +22,7 @@ interface ChatInputProps {
   showUpload?: boolean;
   placeholder?: string;
   footerHint?: string;
+  embedded?: boolean;
   onSend: (message: string) => void;
   onUpload?: (file: File) => Promise<void>;
 }
@@ -32,6 +33,7 @@ export function ChatInput({
   showUpload = true,
   placeholder = "给 smartant 发送消息",
   footerHint = "知识库问答基于已上传文档，回答可能引用原文片段。",
+  embedded = false,
   onSend,
   onUpload,
 }: ChatInputProps) {
@@ -70,76 +72,86 @@ export function ChatInput({
     }
   };
 
-  return (
-    <div className="border-t border-border bg-background px-6 pb-6 pt-3 lg:px-10">
-      <div className="mx-auto w-full max-w-[888px]">
-        <div
-          className={cn(
-            "flex items-end gap-2 rounded-3xl border border-input bg-background px-3 py-2 shadow-sm",
-            "focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20",
-          )}
+  const field = (
+    <>
+      <div
+        className={cn(
+          "flex items-end gap-2 rounded-3xl border border-input bg-background px-3 py-2 shadow-sm",
+          "focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20",
+        )}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={ACCEPT}
+          className="hidden"
+          onChange={handleFileChange}
+        />
+
+        {showUpload && onUpload && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="shrink-0 rounded-full"
+                disabled={disabled || uploading}
+              >
+                {uploading ? (
+                  <Loader2 className="size-5 animate-spin" />
+                ) : (
+                  <Plus className="size-5" />
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" side="top" className="w-56">
+              <DropdownMenuItem
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+              >
+                <Paperclip className="size-4" />
+                添加照片和文件
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+
+        <textarea
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          rows={1}
+          disabled={disabled}
+          className="max-h-40 min-h-[44px] flex-1 resize-none bg-transparent py-2.5 text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
+        />
+
+        <Button
+          type="button"
+          size="icon"
+          className="shrink-0 rounded-full"
+          disabled={disabled || !value.trim()}
+          onClick={handleSubmit}
         >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept={ACCEPT}
-            className="hidden"
-            onChange={handleFileChange}
-          />
-
-          {showUpload && onUpload && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="shrink-0 rounded-full"
-                  disabled={disabled || uploading}
-                >
-                  {uploading ? (
-                    <Loader2 className="size-5 animate-spin" />
-                  ) : (
-                    <Plus className="size-5" />
-                  )}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" side="top" className="w-56">
-                <DropdownMenuItem
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                >
-                  <Paperclip className="size-4" />
-                  添加照片和文件
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-
-          <textarea
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            rows={1}
-            disabled={disabled}
-            className="max-h-40 min-h-[44px] flex-1 resize-none bg-transparent py-2.5 text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
-          />
-
-          <Button
-            type="button"
-            size="icon"
-            className="shrink-0 rounded-full"
-            disabled={disabled || !value.trim()}
-            onClick={handleSubmit}
-          >
-            <ArrowUp className="size-5" />
-          </Button>
-        </div>
+          <ArrowUp className="size-5" />
+        </Button>
+      </div>
+      {footerHint ? (
         <p className="mt-2 text-center text-xs text-muted-foreground">
           {footerHint}
         </p>
-      </div>
+      ) : null}
+    </>
+  );
+
+  if (embedded) {
+    return field;
+  }
+
+  return (
+    <div className="border-t border-border bg-background px-6 pb-6 pt-3 lg:px-10">
+      <div className="mx-auto w-full max-w-[888px]">{field}</div>
     </div>
   );
 }

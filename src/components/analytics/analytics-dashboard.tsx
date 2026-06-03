@@ -21,6 +21,12 @@ import {
 
 interface AnalyticsDashboardProps {
   dashboard: Record<string, unknown>;
+  /** 覆盖 dashboard.summary */
+  summaryOverride?: string;
+  /** 后端已返回 chart.option 时，避免重复绘制 monthly_trend */
+  hideMonthlyTrend?: boolean;
+  /** REASONING 等场景：仅摘要 + KPI，不展示图表/表格 */
+  compact?: boolean;
 }
 
 function KpiCard({ label, value }: { label: string; value: string }) {
@@ -58,13 +64,19 @@ function ChartPanel({
   );
 }
 
-export function AnalyticsDashboard({ dashboard }: AnalyticsDashboardProps) {
+export function AnalyticsDashboard({
+  dashboard,
+  summaryOverride,
+  hideMonthlyTrend = false,
+  compact = false,
+}: AnalyticsDashboardProps) {
   const gmv = asNumber(dashboard.gmv_30d);
   const orders = asNumber(dashboard.orders_30d);
   const aov = asNumber(dashboard.aov_30d);
   const returnRate = asNumber(dashboard.return_rate_30d);
   const summary =
-    typeof dashboard.summary === "string" ? dashboard.summary : undefined;
+    summaryOverride ??
+    (typeof dashboard.summary === "string" ? dashboard.summary : undefined);
 
   const monthlyTrend = asArray<{
     month: string;
@@ -108,7 +120,7 @@ export function AnalyticsDashboard({ dashboard }: AnalyticsDashboardProps) {
   }
 
   return (
-    <div className="mt-4 space-y-4">
+    <div className="space-y-4">
       {summary && (
         <div className="rounded-xl border border-emerald-200/60 bg-emerald-50/50 px-4 py-3 dark:border-emerald-900/40 dark:bg-emerald-950/20">
           <p className="text-xs font-medium text-emerald-800 dark:text-emerald-300">
@@ -141,8 +153,9 @@ export function AnalyticsDashboard({ dashboard }: AnalyticsDashboardProps) {
         )}
       </div>
 
+      {!compact && (
       <div className="grid gap-4 lg:grid-cols-2">
-        {monthlyTrend.length > 0 && (
+        {monthlyTrend.length > 0 && !hideMonthlyTrend && (
           <ChartPanel
             title="月度销售趋势"
             icon={<TrendingUp className="size-4 text-emerald-600" />}
@@ -167,8 +180,9 @@ export function AnalyticsDashboard({ dashboard }: AnalyticsDashboardProps) {
           </ChartPanel>
         )}
       </div>
+      )}
 
-      {topProducts.length > 0 && (
+      {!compact && topProducts.length > 0 && (
         <ChartPanel title="热销产品">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -207,7 +221,7 @@ export function AnalyticsDashboard({ dashboard }: AnalyticsDashboardProps) {
         </ChartPanel>
       )}
 
-      {overview12m && (
+      {!compact && overview12m && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {Object.entries(overview12m).map(([key, raw]) => {
             const num = asNumber(raw);

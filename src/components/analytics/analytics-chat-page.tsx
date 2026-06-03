@@ -1,14 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ChatSidebar } from "@/components/chat/chat-sidebar";
-import { ChatInput } from "@/components/chat/chat-input";
 import { LoginDialog } from "@/components/chat/login-dialog";
 import { SmartantLogo } from "@/components/chat/smartant-logo";
 import { AnalyticsChatMessages } from "@/components/analytics/analytics-chat-messages";
+import { AnalyticsInputPanel } from "@/components/analytics/analytics-input-panel";
 import { HumanCheckpointDialog } from "@/components/analytics/human-checkpoint-dialog";
+import type { StreamSink } from "@/components/analytics/streaming-message-body";
 import { analyticsQuery } from "@/lib/analytics-api";
+import { analyticsQueryStream } from "@/lib/analytics-stream-api";
 import { buildAnalyticsQueryRequest } from "@/lib/analytics-request";
 import {
   createAnalyticsSession,
@@ -32,15 +34,13 @@ import type {
   AnalyticsQueryResponse,
 } from "@/types/analytics";
 
-function buildAssistantMessage(data: AnalyticsQueryResponse): AnalyticsChatMessage {
-  return {
-    id: generateId(),
-    role: "assistant",
-    content: data.message ?? data.errorMessage ?? "",
-    analytics: data,
-    createdAt: Date.now(),
-  };
-}
+import {
+  buildAssistantFromResponse,
+  finalizeStreamAssistantMessage,
+  isPlainTextStreamDelta,
+  omitMessageProgressHint,
+} from "@/lib/analytics-response-utils";
+import { shouldKeepStreamingAfterResult } from "@/lib/analytics-display";
 
 export function AnalyticsChatPage() {
   const [sessions, setSessions] = useState<AnalyticsChatSession[]>([]);
@@ -51,11 +51,16 @@ export function AnalyticsChatPage() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const streamAbortRef = useRef<AbortController | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [checkpointOpen, setCheckpointOpen] = useState(false);
   const [pendingCheckpoint, setPendingCheckpoint] =
     useState<AnalyticsHumanCheckpointVO | null>(null);
   const [pendingTraceId, setPendingTraceId] = useState<string | null>(null);
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  const streamSinkRef = useRef<StreamSink | null>(null);
+  const streamDraftRef = useRef<{ body: string; hint?: string }>({ body: "" });
 
   const filteredSessions = useMemo(
     () => filterSessionsByQuery(sessions, searchQuery),
@@ -65,6 +70,19 @@ export function AnalyticsChatPage() {
   const currentSession =
     sessions.find((s) => s.id === currentSessionId) ??
     (currentSessionId ? getAnalyticsSession(currentSessionId) : undefined);
+
+  const flushStreamToSink = useCallback(() => {
+    const sink = streamSinkRef.current;
+    if (!sink) return;
+    sink.setText(streamDraftRef.current.body);
+    if (streamDraftRef.current.hint) {
+      sink.setProgressHint(streamDraftRef.current.hint);
+    }
+  }, []);
+
+  const handleStreamSinkReady = useCallback(() => {
+    flushStreamToSink();
+  }, [flushStreamToSink]);
 
   const refreshSessions = useCallback(() => {
     setSessions(listAnalyticsSessions());
@@ -139,22 +157,13 @@ export function AnalyticsChatPage() {
     }
   };
 
-  const applyAnalyticsResponse = (
-    data: AnalyticsQueryResponse,
-    baseSession?: AnalyticsChatSession,
-  ) => {
-    const base =
-      baseSession ??
-      (currentSessionId ? getAnalyticsSession(currentSessionId) : undefined);
-    if (!base) return;
-
-    const assistantMessage = buildAssistantMessage(data);
-    const nextSession: AnalyticsChatSession = {
-      ...base,
-      messages: [...base.messages, assistantMessage],
-      pendingTraceId: data.traceId,
+  useEffect(() => {
+    return () => {
+      streamAbortRef.current?.abort();
     };
+  }, []);
 
+  const handleHumanCheckpoint = (data: AnalyticsQueryResponse) => {
     if (
       data.workflowStatus === "AWAITING_HUMAN" &&
       data.humanCheckpoint &&
@@ -164,11 +173,231 @@ export function AnalyticsChatPage() {
       setPendingCheckpoint(data.humanCheckpoint);
       setCheckpointOpen(true);
     }
+  };
 
+  const applyAnalyticsResponse = (
+    data: AnalyticsQueryResponse,
+    baseSession?: AnalyticsChatSession,
+  ) => {
+    const base =
+      baseSession ??
+      (currentSessionId ? getAnalyticsSession(currentSessionId) : undefined);
+    if (!base) return;
+
+    const assistantMessage = buildAssistantFromResponse(data);
+    const nextSession: AnalyticsChatSession = {
+      ...base,
+      messages: [...base.messages, assistantMessage],
+      pendingTraceId: data.traceId,
+    };
+
+    handleHumanCheckpoint(data);
     persistSession(nextSession);
   };
 
+  const updateSessionMessages = (
+    base: AnalyticsChatSession,
+    messages: AnalyticsChatMessage[],
+    extra?: Partial<AnalyticsChatSession>,
+  ) => {
+    const next: AnalyticsChatSession = {
+      ...base,
+      ...extra,
+      messages,
+    };
+    saveAnalyticsSession(next);
+    setSessions(listAnalyticsSessions());
+    setCurrentSessionId(next.id);
+  };
+
+  const handleStreamSend = async (text: string) => {
+    if (!requireLogin() || !user) return;
+    if (!currentSessionId || !currentSession) {
+      toast.error("请先创建对话");
+      return;
+    }
+
+    streamAbortRef.current?.abort();
+    const abort = new AbortController();
+    streamAbortRef.current = abort;
+
+    const userMessage: AnalyticsChatMessage = {
+      id: generateId(),
+      role: "user",
+      content: text,
+      createdAt: Date.now(),
+    };
+
+    const assistantId = generateId();
+    const assistantPlaceholder: AnalyticsChatMessage = {
+      id: assistantId,
+      role: "assistant",
+      content: "",
+      streaming: true,
+      createdAt: Date.now(),
+    };
+
+    /** 流式正文（不含进度） */
+    let streamBody = "";
+    let streamHint: string | undefined;
+    let gotResult = false;
+
+    streamDraftRef.current = { body: "", hint: undefined };
+    setStreamingMessageId(assistantId);
+
+    let workingSession: AnalyticsChatSession = {
+      ...currentSession,
+      title:
+        currentSession.messages.length === 0
+          ? text.slice(0, 24)
+          : currentSession.title,
+      messages: [
+        ...currentSession.messages,
+        userMessage,
+        assistantPlaceholder,
+      ],
+    };
+    updateSessionMessages(workingSession, workingSession.messages);
+    setIsStreaming(true);
+
+    try {
+      await analyticsQueryStream(
+        buildAnalyticsQueryRequest({
+          sessionId: currentSessionId,
+          query: text,
+          userId: user.id,
+        }),
+        {
+          onDelta: (chunk) => {
+            if (!isPlainTextStreamDelta(chunk)) return;
+            streamBody += chunk;
+            streamDraftRef.current.body = streamBody;
+            streamSinkRef.current?.setText(streamBody);
+          },
+          onProgress: (hint) => {
+            streamHint = hint;
+            streamDraftRef.current.hint = hint;
+            streamSinkRef.current?.setProgressHint(hint);
+          },
+          onResult: (data) => {
+            if (shouldKeepStreamingAfterResult(data)) {
+              workingSession = {
+                ...workingSession,
+                pendingTraceId: data.traceId,
+                messages: workingSession.messages.map((m) =>
+                  m.id === assistantId
+                    ? {
+                        ...m,
+                        analytics: data,
+                        streaming: true,
+                        content: streamBody,
+                      }
+                    : m,
+                ),
+              };
+              updateSessionMessages(workingSession, workingSession.messages);
+              handleHumanCheckpoint(data);
+              return;
+            }
+
+            gotResult = true;
+            setStreamingMessageId(null);
+            streamDraftRef.current = { body: "", hint: undefined };
+            const finalized = finalizeStreamAssistantMessage(
+              assistantId,
+              streamBody,
+              data,
+            );
+            workingSession = {
+              ...workingSession,
+              pendingTraceId: data.traceId,
+              messages: workingSession.messages.map((m) =>
+                m.id === assistantId ? finalized : m,
+              ),
+            };
+            updateSessionMessages(workingSession, workingSession.messages);
+            handleHumanCheckpoint(data);
+          },
+          onError: (message) => {
+            toast.error(message);
+            setStreamingMessageId(null);
+            streamDraftRef.current = { body: "", hint: undefined };
+            workingSession = {
+              ...workingSession,
+              messages: workingSession.messages.map((m) =>
+                m.id === assistantId
+                  ? omitMessageProgressHint({
+                      ...m,
+                      streaming: false,
+                      content: streamBody || `错误：${message}`,
+                    })
+                  : m,
+              ),
+            };
+            updateSessionMessages(workingSession, workingSession.messages);
+          },
+          onDone: () => {
+            if (!gotResult) {
+              const current = workingSession.messages.find(
+                (m) => m.id === assistantId,
+              );
+              if (current?.analytics) {
+                const finalized = buildAssistantFromResponse(
+                  {
+                    ...current.analytics,
+                    message: streamBody || current.analytics.message || "",
+                  },
+                  {
+                    id: assistantId,
+                    streamedText: streamBody,
+                    streaming: false,
+                  },
+                );
+                workingSession = {
+                  ...workingSession,
+                  messages: workingSession.messages.map((m) =>
+                    m.id === assistantId ? finalized : m,
+                  ),
+                };
+              } else {
+                workingSession = {
+                  ...workingSession,
+                  messages: workingSession.messages.map((m) =>
+                    m.id === assistantId
+                      ? omitMessageProgressHint({
+                          ...m,
+                          streaming: false,
+                          content: streamBody || m.content,
+                        })
+                      : m,
+                  ),
+                };
+              }
+              updateSessionMessages(workingSession, workingSession.messages);
+            }
+            setStreamingMessageId(null);
+            streamDraftRef.current = { body: "", hint: undefined };
+            setIsStreaming(false);
+          },
+        },
+        abort.signal,
+      );
+    } catch (err) {
+      if (!abort.signal.aborted) {
+        const message = err instanceof Error ? err.message : "流式查询失败";
+        toast.error(message);
+      }
+      setStreamingMessageId(null);
+      streamDraftRef.current = { body: "", hint: undefined };
+      setIsStreaming(false);
+    }
+  };
+
   const handleNewChat = () => {
+    streamAbortRef.current?.abort();
+    setStreamingMessageId(null);
+    streamDraftRef.current = { body: "", hint: undefined };
+    setIsStreaming(false);
     const session = createAnalyticsSession();
     refreshSessions();
     setCurrentSessionId(session.id);
@@ -202,6 +431,7 @@ export function AnalyticsChatPage() {
 
   const handleSend = async (text: string) => {
     if (!requireLogin() || !user) return;
+    if (isStreaming) return;
     if (!currentSessionId || !currentSession) {
       toast.error("请先创建对话");
       return;
@@ -281,15 +511,18 @@ export function AnalyticsChatPage() {
         <AnalyticsChatMessages
           messages={currentSession?.messages ?? []}
           user={user}
-          isLoading={isLoading}
+          isLoading={isLoading && !isStreaming}
+          isStreaming={isStreaming}
+          streamingMessageId={streamingMessageId}
+          streamSinkRef={streamSinkRef}
+          onStreamSinkReady={handleStreamSinkReady}
         />
 
-        <ChatInput
-          showUpload={false}
-          disabled={isLoading || !currentSessionId || checkpointOpen}
-          placeholder="给 smartant 发送消息"
-          footerHint="数据分析由 Agent 生成，含图表时将自动渲染 ECharts。"
+        <AnalyticsInputPanel
+          disabled={isLoading || isStreaming || !currentSessionId || checkpointOpen}
+          streaming={isStreaming}
           onSend={handleSend}
+          onStreamSend={handleStreamSend}
         />
       </main>
 
@@ -302,7 +535,7 @@ export function AnalyticsChatPage() {
       <HumanCheckpointDialog
         open={checkpointOpen}
         checkpoint={pendingCheckpoint}
-        loading={isLoading}
+        loading={isLoading || isStreaming}
         onConfirm={() => handleHumanResponse(true)}
         onReject={() => handleHumanResponse(false)}
         onClose={() => {

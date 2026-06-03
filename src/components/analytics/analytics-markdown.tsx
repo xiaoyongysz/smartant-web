@@ -9,6 +9,7 @@ interface AnalyticsMarkdownProps {
   defaultExpanded?: boolean;
   collapsible?: boolean;
   title?: string;
+  className?: string;
 }
 
 /** 轻量 Markdown：标题、列表、段落（无需额外依赖） */
@@ -50,6 +51,15 @@ function renderMarkdownBlock(text: string) {
       );
       continue;
     }
+    if (trimmed.startsWith("## ")) {
+      flushList();
+      nodes.push(
+        <h2 key={`h2-${key++}`} className="mt-4 text-lg font-semibold text-foreground first:mt-0">
+          {trimmed.slice(3)}
+        </h2>,
+      );
+      continue;
+    }
     if (trimmed.startsWith("### ")) {
       flushList();
       nodes.push(
@@ -84,6 +94,7 @@ export function AnalyticsMarkdown({
   defaultExpanded = false,
   collapsible = true,
   title = "详细分析报告",
+  className,
 }: AnalyticsMarkdownProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const body = useMemo(() => renderMarkdownBlock(content), [content]);
@@ -91,11 +102,18 @@ export function AnalyticsMarkdown({
   if (!content.trim()) return null;
 
   if (!collapsible) {
-    return <div className="space-y-1">{body}</div>;
+    return (
+      <div className={cn("space-y-1", className)}>
+        {title ? (
+          <h3 className="mb-2 text-sm font-semibold text-foreground">{title}</h3>
+        ) : null}
+        {body}
+      </div>
+    );
   }
 
   return (
-    <div className="mt-4 rounded-xl border border-border bg-background">
+    <div className={cn("rounded-xl border border-border bg-background", className)}>
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}

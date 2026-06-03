@@ -49,6 +49,10 @@ export interface AnalyticsChatMessage {
   content: string;
   createdAt: number;
   analytics?: AnalyticsQueryResponse;
+  /** 流式输出进行中 */
+  streaming?: boolean;
+  /** 流式阶段的进度提示（不写入最终正文） */
+  progressHint?: string;
 }
 
 export interface AnalyticsChatSession {

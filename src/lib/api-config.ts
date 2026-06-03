@@ -28,6 +28,7 @@ export const API_ENDPOINTS = {
   upload: `${DOCUMENTS_API_PREFIX}/upload`,
   session: `${RAGAPI_API_PREFIX}/session`,
   analyticsQuery: `${ANALYTICS_API_PREFIX}/query`,
+  analyticsQueryStream: `${ANALYTICS_API_PREFIX}/query/stream`,
 } as const;
 
 export type ApiEndpointKey = keyof typeof API_ENDPOINTS;
